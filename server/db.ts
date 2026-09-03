@@ -1,5 +1,6 @@
 import { Pool, type PoolClient } from "pg";
 import { BOT_ROSTER, type BotSettings } from "../shared/api";
+import { BINGO_CARD_CATALOG } from "./bingoCards";
 
 export const BOT_TELEGRAM_ID_BASE = 900_000_000_000;
 export const BOT_DEFAULT_BALANCE = 100_000;
@@ -11,52 +12,6 @@ export const db = process.env.DATABASE_URL
 export type GameType = "75";
 export type BingoCardRecord = { card_number: number; rows: number[][]; game_type?: GameType };
 export const CARD_SELECTION_LOCKED_ERROR = "የካርድ ምርጫው ለመጀመር 3 ሰከንድ ሲቀር ይቆለፋል";
-
-const bingo75Ranges = [[1, 15], [16, 30], [31, 45], [46, 60], [61, 75]] as const;
-
-function createSeededRandom(seed: number) {
-  let state = seed >>> 0;
-  return () => {
-    state = Math.imul(state ^ (state >>> 15), 1 | state);
-    state ^= state + Math.imul(state ^ (state >>> 7), 61 | state);
-    return ((state ^ (state >>> 14)) >>> 0) / 4_294_967_296;
-  };
-}
-
-function shuffle<T>(items: T[], random: () => number) {
-  for (let index = items.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(random() * (index + 1));
-    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
-  }
-  return items;
-}
-
-function build75Card(cardNumber: number, random: () => number): BingoCardRecord {
-  const columns = bingo75Ranges.map(([min, max]) =>
-    shuffle(Array.from({ length: max - min + 1 }, (_, index) => min + index), random).slice(0, 5),
-  );
-  const rows = Array.from({ length: 5 }, (_, row) =>
-    columns.map((column, col) => row === 2 && col === 2 ? 0 : column[row]),
-  );
-  return { card_number: cardNumber, rows, game_type: "75" };
-}
-
-function buildCardCatalog() {
-  const random = createSeededRandom(0x75b1a90);
-  const cards: BingoCardRecord[] = [];
-  const seen = new Set<string>();
-
-  while (cards.length < 400) {
-    const card = build75Card(cards.length + 1, random);
-    const key = JSON.stringify(card.rows);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    cards.push({ ...card, card_number: cards.length + 401 });
-  }
-
-  return cards;
-}
-
 
 export async function initializeDatabase() {
   if (!db) return;
@@ -258,7 +213,7 @@ export async function initializeDatabase() {
     SELECT 'selecting'
     WHERE NOT EXISTS (SELECT 1 FROM games WHERE status IN ('selecting', 'playing'));
   `;
-  const cardRows = JSON.stringify(buildCardCatalog());
+  const cardRows = JSON.stringify(BINGO_CARD_CATALOG);
   for (const statement of schemaSql.split(";").map((sql) => sql.trim()).filter(Boolean)) {
     try {
       await db.query(statement, statement.includes("$1") ? [cardRows] : []);
