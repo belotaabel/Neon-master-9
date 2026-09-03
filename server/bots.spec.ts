@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOT_ROSTER, chooseBotBatchSize, chooseBotCards, ensureBotsForSelectingGame, planBotAssignments, shuffleBotCards } from "./bots";
+import { BOT_ROSTER, chooseBotBatchSize, chooseBotCards, ensureBotsForSelectingGame, getBotCardSwitchDelay, planBotAssignments, shuffleBotCards } from "./bots";
 import { DEFAULT_BOT_BATCH_MIN_SIZE, normalizeBotBatchSize } from "./db";
 
 describe("production bot roster", () => {
@@ -14,6 +14,16 @@ describe("production bot roster", () => {
     expect(BOT_ROSTER.slice(0, 5)).toEqual(["Abel", "Nati_21", "Yoni", "Dagi_99", "Elias_7"]);
     expect(BOT_ROSTER[BOT_ROSTER.length - 1]).toBe("Sintayehu");
     expect(new Set(BOT_ROSTER).size).toBeLessThan(BOT_ROSTER.length);
+  });
+
+  it("assigns switching behavior to only some bots with a stable delay", () => {
+    const delays = Array.from({ length: 100 }, (_, index) => getBotCardSwitchDelay("game-1", `global-bot:${index}`));
+    const eligibleDelays = delays.filter((delay): delay is number => delay !== null);
+
+    expect(eligibleDelays.length).toBeGreaterThan(0);
+    expect(eligibleDelays.length).toBeLessThan(delays.length);
+    expect(eligibleDelays.every((delay) => delay >= 5000 && delay < 15000)).toBe(true);
+    expect(getBotCardSwitchDelay("game-1", "global-bot:7")).toBe(getBotCardSwitchDelay("game-1", "global-bot:7"));
   });
 
   it("chooses a random batch size within the configured range", () => {

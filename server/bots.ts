@@ -5,6 +5,28 @@ import { BOT_DEFAULT_BALANCE, BOT_TELEGRAM_ID_BASE, CARD_SELECTION_LOCKED_ERROR,
 
 const CARD_PRICE = 10;
 const BOT_SELECTION_CUTOFF_MS = 45000;
+const BOT_CARD_SWITCH_DELAY_MIN_MS = 5000;
+const BOT_CARD_SWITCH_DELAY_RANGE_MS = 10000;
+const BOT_CARD_SWITCH_ELIGIBILITY_DIVISOR = 5;
+
+type CurrentBotCard = {
+  user_id: number | string;
+  bot_key: string;
+  card_number: number | string;
+  purchased_at: string | Date;
+};
+
+function hashText(value: string) {
+  let hash = 0;
+  for (const character of value) hash = Math.imul(hash, 31) + character.charCodeAt(0) | 0;
+  return hash >>> 0;
+}
+
+export function getBotCardSwitchDelay(gameId: string, botKey: string) {
+  const hash = hashText(`${gameId}:${botKey}`);
+  if (hash % BOT_CARD_SWITCH_ELIGIBILITY_DIVISOR !== 0) return null;
+  return BOT_CARD_SWITCH_DELAY_MIN_MS + hash % BOT_CARD_SWITCH_DELAY_RANGE_MS;
+}
 
 type BotAssignment = {
   index: number;
@@ -182,12 +204,53 @@ async function runBotCoordinator(gameId: string): Promise<BotCoordinationResult>
       await client.query("COMMIT");
       return { added: 0, intervalMs: settings.purchaseIntervalMs };
     }
-    const existing = await client.query<{ bot_key: string }>(
-      `SELECT u.bot_key
+    const existing = await client.query<CurrentBotCard>(
+      `SELECT u.id AS user_id, u.bot_key, gc.card_number, gc.purchased_at
        FROM game_cards gc JOIN users u ON u.id = gc.user_id
        WHERE gc.game_id = $1 AND u.is_bot = TRUE`,
       [gameId],
     );
+    const switched = await client.query<{ user_id: number | string }>(
+      `SELECT DISTINCT user_id
+       FROM audit_logs
+       WHERE action = 'bot_card_switch' AND entity_type = 'game' AND entity_id = $1`,
+      [gameId],
+    );
+    const switchedUserIds = new Set(switched.rows.map((row) => Number(row.user_id)));
+    const now = Date.now();
+    const switchCandidate = existing.rows
+      .filter((bot) => !switchedUserIds.has(Number(bot.user_id)))
+      .map((bot) => ({ ...bot, delay: getBotCardSwitchDelay(gameId, bot.bot_key) }))
+      .filter((bot) => bot.delay !== null && now - new Date(bot.purchased_at).getTime() >= bot.delay)
+      .sort((left, right) => new Date(left.purchased_at).getTime() - new Date(right.purchased_at).getTime())[0];
+
+    if (switchCandidate && !selectionExpired()) {
+      const oldCardNumber = Number(switchCandidate.card_number);
+      const oldPublicCardNumber = oldCardNumber - 400;
+      const replacementCardNumber = shuffleBotCards(
+        (await availableCards(client, gameId)).filter((cardNumber) => cardNumber !== oldPublicCardNumber),
+      )[0];
+      if (replacementCardNumber !== undefined) {
+        await client.query(
+          "DELETE FROM game_cards WHERE game_id = $1 AND user_id = $2 AND card_number = $3",
+          [gameId, Number(switchCandidate.user_id), oldCardNumber],
+        );
+        if (selectionExpired()) throw new Error(CARD_SELECTION_LOCKED_ERROR);
+        await client.query(
+          "INSERT INTO game_cards (game_id, user_id, card_number) VALUES ($1, $2, $3)",
+          [gameId, Number(switchCandidate.user_id), replacementCardNumber + 400],
+        );
+        if (selectionExpired()) throw new Error(CARD_SELECTION_LOCKED_ERROR);
+        await client.query(
+          `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+           VALUES ($1, 'bot_card_switch', 'game', $2, jsonb_build_object('releasedCardNumber', $3, 'newCardNumber', $4))`,
+          [Number(switchCandidate.user_id), gameId, oldPublicCardNumber, replacementCardNumber],
+        );
+        await client.query("COMMIT");
+        return { added: 1, intervalMs: settings.purchaseIntervalMs };
+      }
+    }
+
     const assignments = planBotAssignments(existing.rows.map((row) => row.bot_key), shuffleBotCards(await availableCards(client, gameId)), settings.botCount, settings.batchSizeMin, settings.batchSizeMax);
     if (!assignments.length || selectionExpired()) {
       await client.query("COMMIT");
