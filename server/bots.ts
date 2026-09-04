@@ -5,6 +5,8 @@ import { BOT_DEFAULT_BALANCE, BOT_TELEGRAM_ID_BASE, CARD_SELECTION_LOCKED_ERROR,
 
 const CARD_PRICE = 10;
 const BOT_SELECTION_CUTOFF_MS = 45000;
+const BOT_INITIAL_PURCHASE_DELAY_MIN_MS = 5000;
+const BOT_INITIAL_PURCHASE_DELAY_RANGE_MS = 5001;
 const BOT_CARD_SWITCH_DELAY_MIN_MS = 5000;
 const BOT_CARD_SWITCH_DELAY_RANGE_MS = 10000;
 const BOT_CARD_SWITCH_ELIGIBILITY_DIVISOR = 5;
@@ -20,6 +22,10 @@ function hashText(value: string) {
   let hash = 0;
   for (const character of value) hash = Math.imul(hash, 31) + character.charCodeAt(0) | 0;
   return hash >>> 0;
+}
+
+export function getBotInitialPurchaseDelay(gameId: string) {
+  return BOT_INITIAL_PURCHASE_DELAY_MIN_MS + hashText(`purchase:${gameId}`) % BOT_INITIAL_PURCHASE_DELAY_RANGE_MS;
 }
 
 export function getBotCardSwitchDelay(gameId: string, botKey: string) {
@@ -203,6 +209,12 @@ async function runBotCoordinator(gameId: string): Promise<BotCoordinationResult>
     if (!game.rowCount || game.rows[0].status !== "selecting" || selectionExpired()) {
       await client.query("COMMIT");
       return { added: 0, intervalMs: settings.purchaseIntervalMs };
+    }
+    const elapsed = Date.now() - selectingStartedAt;
+    const initialPurchaseDelay = getBotInitialPurchaseDelay(gameId);
+    if (elapsed < initialPurchaseDelay) {
+      await client.query("COMMIT");
+      return { added: 0, intervalMs: Math.max(settings.purchaseIntervalMs, initialPurchaseDelay - elapsed) };
     }
     const existing = await client.query<CurrentBotCard>(
       `SELECT u.id AS user_id, u.bot_key, gc.card_number, gc.purchased_at
