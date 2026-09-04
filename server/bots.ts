@@ -263,7 +263,7 @@ async function runBotCoordinator(gameId: string): Promise<BotCoordinationResult>
         if (selectionExpired()) throw new Error(CARD_SELECTION_LOCKED_ERROR);
         await client.query(
           `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-           VALUES ($1, 'bot_card_switch', 'game', $2, jsonb_build_object('releasedCardNumber', $3, 'newCardNumber', $4))`,
+           VALUES ($1, 'bot_card_switch', 'game', $2, jsonb_build_object('releasedCardNumber', $3::int, 'newCardNumber', $4::int))`,
           [Number(switchCandidate.user_id), gameId, oldPublicCardNumber, replacementCardNumber],
         );
         await client.query("COMMIT");
