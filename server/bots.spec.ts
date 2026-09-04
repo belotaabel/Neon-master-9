@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOT_ROSTER, chooseBotBatchSize, chooseBotCards, ensureBotsForSelectingGame, getBotCardSwitchDelay, getBotInitialPurchaseDelay, planBotAssignments, shuffleBotCards } from "./bots";
+import { BOT_ROSTER, chooseBotBatchSize, chooseBotCards, ensureBotsForSelectingGame, getBotCardSwitchDelay, getBotCountForGame, getBotInitialPurchaseDelay, planBotAssignments, shuffleBotCards } from "./bots";
 import { DEFAULT_BOT_BATCH_MIN_SIZE, normalizeBotBatchSize } from "./db";
 
 describe("production bot roster", () => {
@@ -21,6 +21,15 @@ describe("production bot roster", () => {
 
     expect(delays.every((delay) => delay >= 5000 && delay <= 10000)).toBe(true);
     expect(getBotInitialPurchaseDelay("game-1")).toBe(getBotInitialPurchaseDelay("game-1"));
+  });
+
+  it("selects a stable random bot count within three of the configured target", () => {
+    const counts = Array.from({ length: 100 }, (_, index) => getBotCountForGame(`game-${index}`, 10));
+
+    expect(counts.every((count) => count >= 7 && count <= 13)).toBe(true);
+    expect(new Set(counts).size).toBeGreaterThan(1);
+    expect(getBotCountForGame("game-1", 10)).toBe(getBotCountForGame("game-1", 10));
+    expect(getBotCountForGame("game-1", 0)).toBe(0);
   });
 
   it("assigns switching behavior to only some bots with a stable delay", () => {

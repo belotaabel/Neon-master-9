@@ -28,6 +28,14 @@ export function getBotInitialPurchaseDelay(gameId: string) {
   return BOT_INITIAL_PURCHASE_DELAY_MIN_MS + hashText(`purchase:${gameId}`) % BOT_INITIAL_PURCHASE_DELAY_RANGE_MS;
 }
 
+export function getBotCountForGame(gameId: string, configuredCount: number) {
+  const target = Math.min(Math.max(0, Math.floor(configuredCount)), BOT_ROSTER.length);
+  if (target === 0) return 0;
+  const minimum = Math.max(1, target - 3);
+  const maximum = Math.min(BOT_ROSTER.length, target + 3);
+  return minimum + hashText(`count:${gameId}`) % (maximum - minimum + 1);
+}
+
 export function getBotCardSwitchDelay(gameId: string, botKey: string) {
   const hash = hashText(`${gameId}:${botKey}`);
   if (hash % BOT_CARD_SWITCH_ELIGIBILITY_DIVISOR !== 0) return null;
@@ -263,7 +271,8 @@ async function runBotCoordinator(gameId: string): Promise<BotCoordinationResult>
       }
     }
 
-    const assignments = planBotAssignments(existing.rows.map((row) => row.bot_key), shuffleBotCards(await availableCards(client, gameId)), settings.botCount, settings.batchSizeMin, settings.batchSizeMax);
+    const botCountForGame = getBotCountForGame(gameId, settings.botCount);
+    const assignments = planBotAssignments(existing.rows.map((row) => row.bot_key), shuffleBotCards(await availableCards(client, gameId)), botCountForGame, settings.batchSizeMin, settings.batchSizeMax);
     if (!assignments.length || selectionExpired()) {
       await client.query("COMMIT");
       return { added: 0, intervalMs: settings.purchaseIntervalMs };
