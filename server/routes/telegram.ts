@@ -101,10 +101,12 @@ export async function sendTelegramMessage(token: string, chatId: number, payload
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, ...payload }),
   });
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Telegram sendMessage failed (${response.status}): ${details}`);
+  const body = await response.json() as { error_code?: number; description?: string };
+  if (response.status === 403 && body.error_code === 403 && body.description?.includes("bot was blocked by the user")) {
+    console.warn("Telegram message skipped because the recipient blocked the bot", { chatId });
+    return;
   }
+  if (!response.ok) throw new Error(`Telegram sendMessage failed (${response.status}): ${body.description ?? "Telegram delivery failed"}`);
 }
 
 export async function notifyAdminDeposit(token: string, transaction: { id: number; amount: number | string }, telegramId: number, reference: string) {
