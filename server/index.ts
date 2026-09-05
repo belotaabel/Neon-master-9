@@ -7,7 +7,8 @@ import { handleTelegramWebhook } from "./routes/telegram";
 import { handleMe, handleProfilePhoto } from "./routes/me";
 import { handleCardCatalog, handleGameInfo } from "./routes/game";
 import { handleWallet, handleDeposit, handleWithdrawal } from "./routes/wallet";
-import { handleAdminLogin, handleAdminOverview, handleAdminBonusSettings, handleAdminBonusSettingsUpdate, handleAdminBotBulkFunding, handleAdminBotFunding, handleAdminBotSettings, handleAdminBotSettingsUpdate, handleAdminBots, handleAdminPlayers, handleAdminPromoCodes, handleAdminPromoCodeCreate, handleAdminBroadcast, handleAdminSimulationStatus, handleAdminSimulationStart, handleAdminSimulationStop, handleAdminSimulationClear } from "./routes/admin";
+import { handleAdminLogin, handleAdminOverview, handleAdminBonusSettings, handleAdminBonusSettingsUpdate, handleAdminLeaderboardSettings, handleAdminLeaderboardSettingsUpdate, handleAdminBotBulkFunding, handleAdminBotFunding, handleAdminBotSettings, handleAdminBotSettingsUpdate, handleAdminBots, handleAdminPlayers, handleAdminPromoCodes, handleAdminPromoCodeCreate, handleAdminBroadcast, handleAdminSimulationStatus, handleAdminSimulationStart, handleAdminSimulationStop, handleAdminSimulationClear } from "./routes/admin";
+import { handleLeaderboard } from "./leaderboard";
 
 export type ServiceMode = "75" | "gateway";
 export const serviceMode: ServiceMode = process.env.SERVICE_MODE === "gateway" ? "gateway" : "75";
@@ -67,6 +68,7 @@ export function createServer() {
   });
 
   app.get("/api/demo", handleDemo);
+  app.get("/api/leaderboard", serviceMode === "gateway" ? proxyGameRequest : handleLeaderboard);
   app.post("/api/telegram/webhook", handleTelegramWebhook);
   app.get("/api/me", handleMe);
   app.get("/api/profile-photo/:telegramId", handleProfilePhoto);
@@ -77,6 +79,8 @@ export function createServer() {
   app.get("/api/admin/overview", handleAdminOverview);
   app.get("/api/admin/bonus-settings", handleAdminBonusSettings);
   app.put("/api/admin/bonus-settings", handleAdminBonusSettingsUpdate);
+  app.get("/api/admin/leaderboard-settings", handleAdminLeaderboardSettings);
+  app.put("/api/admin/leaderboard-settings", handleAdminLeaderboardSettingsUpdate);
   app.get("/api/admin/bot-settings", serviceMode === "gateway" ? proxyBotAdminRequest : handleAdminBotSettings);
   app.put("/api/admin/bot-settings", serviceMode === "gateway" ? proxyBotAdminRequest : handleAdminBotSettingsUpdate);
   app.get("/api/admin/bots", serviceMode === "gateway" ? proxyBotAdminRequest : handleAdminBots);

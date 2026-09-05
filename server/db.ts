@@ -1,5 +1,6 @@
 import { Pool, type PoolClient } from "pg";
 import { BOT_ROSTER, type BotSettings } from "../shared/api";
+import { BINGO_CARD_CATALOG } from "./bingoCards";
 
 export const BOT_TELEGRAM_ID_BASE = 900_000_000_000;
 export const BOT_DEFAULT_BALANCE = 100_000;
@@ -11,14 +12,6 @@ export const db = process.env.DATABASE_URL
 export type GameType = "75";
 export type BingoCardRecord = { card_number: number; rows: number[][]; game_type?: GameType };
 export const CARD_SELECTION_LOCKED_ERROR = "የካርድ ምርጫው ለመጀመር 3 ሰከንድ ሲቀር ይቆለፋል";
-
-const bingo75Ranges = [[1, 15], [16, 30], [31, 45], [46, 60], [61, 75]] as const;
-
-function build75Card(cardNumber: number): BingoCardRecord {
-  const rows = Array.from({ length: 5 }, (_, row) => bingo75Ranges.map(([min, max], col) => row === 2 && col === 2 ? 0 : min + ((cardNumber * 13 + row * 7 + col * 3) % (max - min + 1))));
-  return { card_number: cardNumber, rows, game_type: "75" };
-}
-
 
 export async function initializeDatabase() {
   if (!db) return;
@@ -178,7 +171,8 @@ export async function initializeDatabase() {
       ('global_bot_count', 0),
       ('global_bot_purchase_interval_ms', 10),
       ('global_bot_batch_min_size', 1),
-      ('global_bot_batch_size', 1)
+      ('global_bot_batch_size', 1),
+      ('leaderboard_report_hour', 18)
     ON CONFLICT (key) DO NOTHING;
 
     CREATE INDEX IF NOT EXISTS game_cards_game_id_idx ON game_cards(game_id);
@@ -220,9 +214,7 @@ export async function initializeDatabase() {
     SELECT 'selecting'
     WHERE NOT EXISTS (SELECT 1 FROM games WHERE status IN ('selecting', 'playing'));
   `;
-  const cardRows = JSON.stringify([
-    ...Array.from({ length: 400 }, (_, index) => ({ ...build75Card(index + 1), card_number: index + 401 })),
-  ]);
+  const cardRows = JSON.stringify(BINGO_CARD_CATALOG);
   for (const statement of schemaSql.split(";").map((sql) => sql.trim()).filter(Boolean)) {
     try {
       await db.query(statement, statement.includes("$1") ? [cardRows] : []);
@@ -345,6 +337,11 @@ export async function createWithdrawalRequest(telegramId: number, amount: number
     await client.query("BEGIN");
     const user = await client.query("SELECT id FROM users WHERE telegram_id = $1 FOR UPDATE", [telegramId]);
     if (!user.rowCount) throw new Error("Telegram user is not registered");
+    const qualifyingDeposit = await client.query(
+      "SELECT 1 FROM transactions WHERE user_id = $1 AND type = 'deposit' AND status = 'approved' AND amount >= 50 LIMIT 1",
+      [user.rows[0].id],
+    );
+    if (!qualifyingDeposit.rowCount) throw new Error("Withdrawal requires at least one approved deposit of 50 ETB or more");
     const balance = await client.query("SELECT main_balance FROM balances WHERE user_id = $1 FOR UPDATE", [user.rows[0].id]);
     if (!balance.rowCount || Number(balance.rows[0].main_balance) < amount) throw new Error("Insufficient main balance");
     await client.query("UPDATE balances SET main_balance = main_balance - $1, updated_at = NOW() WHERE user_id = $2", [amount, user.rows[0].id]);
@@ -353,6 +350,33 @@ export async function createWithdrawalRequest(telegramId: number, amount: number
     return result.rows[0];
   } catch (error) { await client.query("ROLLBACK"); throw error; }
   finally { client.release(); }
+}
+
+export const DEFAULT_LEADERBOARD_REPORT_HOUR = 18;
+
+export function normalizeLeaderboardReportHour(value: number) {
+  return Number.isInteger(value) && value >= 0 && value <= 23
+    ? value
+    : DEFAULT_LEADERBOARD_REPORT_HOUR;
+}
+
+export async function getLeaderboardReportHour() {
+  if (!db) throw new Error("DATABASE_URL is not configured");
+  const result = await db.query<{ value: string | number }>(
+    "SELECT value FROM app_settings WHERE key = 'leaderboard_report_hour'",
+  );
+  return normalizeLeaderboardReportHour(Number(result.rows[0]?.value));
+}
+
+export async function updateLeaderboardReportHour(reportHour: number) {
+  if (!db) throw new Error("DATABASE_URL is not configured");
+  const normalized = normalizeLeaderboardReportHour(reportHour);
+  await db.query(
+    `INSERT INTO app_settings (key, value) VALUES ('leaderboard_report_hour', $1)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [normalized],
+  );
+  return { reportHour: normalized };
 }
 
 export async function getDepositBonusSettings() {

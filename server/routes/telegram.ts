@@ -101,10 +101,12 @@ export async function sendTelegramMessage(token: string, chatId: number, payload
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, ...payload }),
   });
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Telegram sendMessage failed (${response.status}): ${details}`);
+  const body = await response.json() as { error_code?: number; description?: string };
+  if (response.status === 403 && body.error_code === 403 && body.description?.includes("bot was blocked by the user")) {
+    console.warn("Telegram message skipped because the recipient blocked the bot", { chatId });
+    return;
   }
+  if (!response.ok) throw new Error(`Telegram sendMessage failed (${response.status}): ${body.description ?? "Telegram delivery failed"}`);
 }
 
 export async function notifyAdminDeposit(token: string, transaction: { id: number; amount: number | string }, telegramId: number, reference: string) {
@@ -326,7 +328,7 @@ export const handleTelegramWebhook: RequestHandler = async (req, res) => {
         const adminChatId = Number(process.env.TELEGRAM_ADMIN_CHAT_ID);
         if (Number.isSafeInteger(adminChatId)) await sendTelegramMessage(token, adminChatId, { text: `🔔 አዲስ Withdraw ጥያቄ\nUser: ${message.from.id}\nAmount: ${transaction.amount} ETB\nAccount: ${state.account}\nOwner: ${text.trim()}\nTransaction ID: ${transaction.id}\nStatus: Pending`, reply_markup: { inline_keyboard: [[{ text: "✅ Approve", callback_data: `withdraw_approve:${transaction.id}` }, { text: "❌ Reject", callback_data: `withdraw_reject:${transaction.id}` }]] } });
         await sendTelegramMessage(token, chatId, { text: `✅ Withdraw ጥያቄዎ ተቀብሏል።\nመጠን: ${transaction.amount} ETB\nሁኔታ: Pending`, reply_markup: mainMenu() });
-      } catch (error) { withdrawalSteps.delete(message.from.id); await sendTelegramMessage(token, chatId, { text: error instanceof Error && error.message === "Insufficient main balance" ? "በቂ Main Balance የለዎትም።" : "Withdraw ጥያቄውን ማስመዝገብ አልተቻለም።", reply_markup: mainMenu() }); }
+      } catch (error) { withdrawalSteps.delete(message.from.id); await sendTelegramMessage(token, chatId, { text: error instanceof Error && error.message === "Insufficient main balance" ? "በቂ Main Balance የለዎትም።" : error instanceof Error && error.message === "Withdrawal requires at least one approved deposit of 50 ETB or more" ? "Withdraw ለማድረግ ቢያንስ 50 ብር የተፈቀደ deposit ቢያንስ አንድ ጊዜ ማድረግ ያስፈልጋል።" : "Withdraw ጥያቄውን ማስመዝገብ አልተቻለም።", reply_markup: mainMenu() }); }
     } else if (message.from?.id && depositSteps.get(message.from.id)?.step === "amount") {
       const amount = Number(text.replace(/[, ]/g, ""));
       if (!Number.isFinite(amount) || amount < 10) {
