@@ -256,7 +256,6 @@ export async function getLeaderboard(
      SELECT u.id::bigint AS "userId", u.display_name AS "displayName", COUNT(*)::int AS wins
      FROM winner_rows
      JOIN users u ON u.id = winner_rows.user_id
-     WHERE u.is_bot IS NOT TRUE
      GROUP BY u.id, u.display_name
      ORDER BY wins DESC, u.id ASC
      LIMIT 3`,
