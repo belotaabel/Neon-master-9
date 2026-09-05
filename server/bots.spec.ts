@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOT_ROSTER, chooseBotBatchSize, chooseBotCards, ensureBotsForSelectingGame, getBotCardSwitchDelay, getBotCountForGame, getBotInitialPurchaseDelay, planBotAssignments, shuffleBotCards } from "./bots";
+import { BOT_ROSTER, chooseBotBatchSize, chooseBotCards, ensureBotsForSelectingGame, getBotCardSwitchDelay, getBotCountForGame, getBotInitialPurchaseDelay, getBotRosterForGame, planBotAssignments, shuffleBotCards } from "./bots";
 import { DEFAULT_BOT_BATCH_MIN_SIZE, normalizeBotBatchSize } from "./db";
 
 describe("production bot roster", () => {
@@ -21,6 +21,16 @@ describe("production bot roster", () => {
 
     expect(delays.every((delay) => delay >= 5000 && delay <= 10000)).toBe(true);
     expect(getBotInitialPurchaseDelay("game-1")).toBe(getBotInitialPurchaseDelay("game-1"));
+  });
+
+  it("selects a different stable bot roster for different games", () => {
+    const firstRoster = getBotRosterForGame("game-1", 10);
+    const secondRoster = getBotRosterForGame("game-2", 10);
+
+    expect(firstRoster).toHaveLength(10);
+    expect(new Set(firstRoster).size).toBe(10);
+    expect(firstRoster).toEqual(getBotRosterForGame("game-1", 10));
+    expect(secondRoster).not.toEqual(firstRoster);
   });
 
   it("selects a stable random bot count within three of the configured target", () => {
@@ -62,30 +72,27 @@ describe("production bot roster", () => {
   });
 
   it("plans one distinct card for each missing bot in a batch", () => {
-    const assignments = planBotAssignments(["global-bot:1"], [7, 12, 31], 4, 3, 3);
-    expect(assignments).toEqual([
-      { index: 0, name: "Abel", cardNumber: 7 },
-      { index: 2, name: "Yoni", cardNumber: 12 },
-      { index: 3, name: "Dagi_99", cardNumber: 31 },
-    ]);
+    const assignments = planBotAssignments("game-assignments", ["global-bot:1"], [7, 12, 31], 4, 3, 3);
+    const expectedIndexes = getBotRosterForGame("game-assignments", 4).filter((index) => index !== 1);
+    expect(assignments.map(({ index, cardNumber }) => [index, cardNumber])).toEqual(expectedIndexes.slice(0, 3).map((index, cardIndex) => [index, [7, 12, 31][cardIndex]]));
   });
 
   it("caps a batch at the configured target and available cards", () => {
-    const assignments = planBotAssignments([], Array.from({ length: 400 }, (_, index) => index + 1), 25, 25, 25);
+    const assignments = planBotAssignments("game-cap", [], Array.from({ length: 400 }, (_, index) => index + 1), 25, 25, 25);
     expect(assignments).toHaveLength(25);
     expect(new Set(assignments.map(({ cardNumber }) => cardNumber)).size).toBe(25);
-    expect(assignments[24].index).toBe(24);
+    expect(assignments[24].index).toBe(getBotRosterForGame("game-cap", 25)[24]);
   });
 
   it("limits assignments to the configured batch size", () => {
-    const assignments = planBotAssignments([], Array.from({ length: 400 }, (_, index) => index + 1), 25, 4, 4);
+    const assignments = planBotAssignments("game-batch", [], Array.from({ length: 400 }, (_, index) => index + 1), 25, 4, 4);
     expect(assignments).toHaveLength(4);
-    expect(assignments[3].index).toBe(3);
+    expect(assignments[3].index).toBe(getBotRosterForGame("game-batch", 25)[3]);
   });
 
   it("stops cleanly when the card catalog is exhausted", () => {
-    expect(planBotAssignments([], [], 200)).toEqual([]);
-    expect(planBotAssignments([], [42, 43], 200, 25, 25)).toHaveLength(2);
+    expect(planBotAssignments("game-empty", [], [], 200)).toEqual([]);
+    expect(planBotAssignments("game-exhausted", [], [42, 43], 200, 25, 25)).toHaveLength(2);
   });
 
   it("does not require a database when live bot coordination is unavailable", async () => {

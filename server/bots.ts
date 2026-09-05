@@ -24,6 +24,14 @@ function hashText(value: string) {
   return hash >>> 0;
 }
 
+function mixHash(value: number) {
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x7feb352d);
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b);
+  return (value ^ (value >>> 16)) >>> 0;
+}
+
 export function getBotInitialPurchaseDelay(gameId: string) {
   return BOT_INITIAL_PURCHASE_DELAY_MIN_MS + hashText(`purchase:${gameId}`) % BOT_INITIAL_PURCHASE_DELAY_RANGE_MS;
 }
@@ -34,6 +42,15 @@ export function getBotCountForGame(gameId: string, configuredCount: number) {
   const minimum = Math.max(1, target - 3);
   const maximum = Math.min(BOT_ROSTER.length, target + 3);
   return minimum + hashText(`count:${gameId}`) % (maximum - minimum + 1);
+}
+
+export function getBotRosterForGame(gameId: string, botCount: number) {
+  const target = Math.min(Math.max(0, Math.floor(botCount)), BOT_ROSTER.length);
+  return BOT_ROSTER
+    .map((name, index) => ({ name, index, order: mixHash(hashText(`roster:${gameId}:${index}`)) }))
+    .sort((left, right) => left.order - right.order || left.index - right.index)
+    .slice(0, target)
+    .map(({ index }) => index);
 }
 
 export function getBotCardSwitchDelay(gameId: string, botKey: string) {
@@ -76,13 +93,12 @@ export function chooseBotBatchSize(batchSizeMin: number, batchSizeMax: number) {
   return randomInt(minimum, maximum + 1);
 }
 
-export function planBotAssignments(existingBotKeys: Iterable<string>, availableCards: number[], botCount: number, batchSizeMin = DEFAULT_BOT_BATCH_MIN_SIZE, batchSizeMax = batchSizeMin): BotAssignment[] {
+export function planBotAssignments(gameId: string, existingBotKeys: Iterable<string>, availableCards: number[], botCount: number, batchSizeMin = DEFAULT_BOT_BATCH_MIN_SIZE, batchSizeMax = batchSizeMin): BotAssignment[] {
   const existing = new Set(existingBotKeys);
   const target = Math.min(Math.max(0, Math.floor(botCount)), BOT_ROSTER.length);
   const limit = Math.min(chooseBotBatchSize(batchSizeMin, batchSizeMax), target);
-  const missingIndexes = BOT_ROSTER
-    .map((_, index) => index)
-    .filter((index) => index < target && !existing.has(`global-bot:${index}`));
+  const missingIndexes = getBotRosterForGame(gameId, target)
+    .filter((index) => !existing.has(`global-bot:${index}`));
 
   return missingIndexes.slice(0, Math.min(availableCards.length, limit)).map((index, cardIndex) => ({
     index,
@@ -272,7 +288,7 @@ async function runBotCoordinator(gameId: string): Promise<BotCoordinationResult>
     }
 
     const botCountForGame = getBotCountForGame(gameId, settings.botCount);
-    const assignments = planBotAssignments(existing.rows.map((row) => row.bot_key), shuffleBotCards(await availableCards(client, gameId)), botCountForGame, settings.batchSizeMin, settings.batchSizeMax);
+    const assignments = planBotAssignments(gameId, existing.rows.map((row) => row.bot_key), shuffleBotCards(await availableCards(client, gameId)), botCountForGame, settings.batchSizeMin, settings.batchSizeMax);
     if (!assignments.length || selectionExpired()) {
       await client.query("COMMIT");
       return { added: 0, intervalMs: settings.purchaseIntervalMs };
