@@ -78,5 +78,14 @@ describe("leaderboard report scheduling and formatting", () => {
       "Leaderboard report\n\nDaily · 2016-05-06 ዓ.ም.\n1. Alice — 2 wins",
     );
     expect(formatLeaderboardReport(reports.slice(1))).toBe("");
+    expect(formatLeaderboardReport([{
+      ...reports[0],
+      entries: [
+        { userId: 1, displayName: "One", wins: 4 },
+        { userId: 2, displayName: "Two", wins: 3 },
+        { userId: 3, displayName: "Three", wins: 2 },
+        { userId: 4, displayName: "Four", wins: 1 },
+      ],
+    }])).not.toContain("4. Four");
   });
 });

@@ -170,7 +170,7 @@ export function formatLeaderboardReport(reports: LeaderboardResult[]) {
     ...nonEmptyReports.map((report) =>
       [
         formatPeriodLabel(report.period, report.periodStart),
-        ...report.entries.map(
+        ...report.entries.slice(0, 3).map(
           (entry, index) =>
             `${index + 1}. ${entry.displayName} — ${entry.wins} win${entry.wins === 1 ? "" : "s"}`,
         ),
@@ -182,8 +182,10 @@ export function formatLeaderboardReport(reports: LeaderboardResult[]) {
 export async function getLeaderboard(
   period: LeaderboardPeriod,
   now = new Date(),
+  limit = 10,
 ): Promise<LeaderboardResult> {
   const boundaries = getPeriodBoundaries(period, now);
+  const entryLimit = Math.min(10, Math.max(1, Math.trunc(limit)));
   if (!db) throw new Error("DATABASE_URL is not configured");
 
   const result = await db.query<{
@@ -212,8 +214,8 @@ export async function getLeaderboard(
      JOIN users u ON u.id = winner_rows.user_id
      GROUP BY u.id, u.display_name
      ORDER BY wins DESC, u.id ASC
-     LIMIT 3`,
-    [boundaries.start.toISOString(), boundaries.end.toISOString()],
+     LIMIT $3::int`,
+    [boundaries.start.toISOString(), boundaries.end.toISOString(), entryLimit],
   );
 
   return {
@@ -270,7 +272,7 @@ export async function executeLeaderboardReport(now = new Date()) {
         const referenceDate = period === "weekly"
           ? new Date(now.getTime() - 24 * 60 * 60 * 1000)
           : now;
-        return getLeaderboard(period, referenceDate);
+        return getLeaderboard(period, referenceDate, 3);
       }),
     );
     const text = formatLeaderboardReport(reports);
