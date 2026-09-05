@@ -7,6 +7,7 @@ import {
   Home,
   MoreVertical,
   Star,
+  Trophy,
   Users,
   Volume2,
   VolumeX,
@@ -42,6 +43,9 @@ type GameState = {
   gameId: string;
 };
 type WalletForm = { amount: string; reference: string; account: string; owner: string };
+type LeaderboardPeriod = "daily" | "weekly" | "monthly";
+type LeaderboardEntry = { userId: number; displayName: string; wins: number };
+type LeaderboardResponse = { period: LeaderboardPeriod; periodStart: string; periodEnd: string; entries: LeaderboardEntry[] };
 
 const numberAudioPaths: Partial<Record<number, string>> = {
   1: "/audio/B1.mp3",
@@ -282,6 +286,66 @@ function WalletPanel({
   );
 }
 
+function LeaderboardPanel({ apiBase, onClose }: { apiBase: string; onClose: () => void }) {
+  const [period, setPeriod] = useState<LeaderboardPeriod>("daily");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetch(`${apiBase}/api/leaderboard?period=${period}`, { signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || "Leaderboard unavailable");
+        return body as LeaderboardResponse;
+      })
+      .then(setLeaderboard)
+      .catch((requestError) => {
+        if (requestError instanceof DOMException && requestError.name === "AbortError") return;
+        setError(requestError instanceof Error ? requestError.message : "Leaderboard unavailable");
+        setLeaderboard(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [apiBase, period]);
+
+  return (
+    <aside className="leaderboard-panel" role="dialog" aria-modal="true" aria-labelledby="leaderboard-title">
+      <div className="leaderboard-heading">
+        <div>
+          <p className="panel-kicker">75 BINGO</p>
+          <h2 id="leaderboard-title">ሊደርቦርድ</h2>
+          <p>ብዙ ያሸነፉ ተጫዋቾች</p>
+        </div>
+        <button className="icon-button" onClick={onClose} aria-label="Close leaderboard"><ArrowLeft /></button>
+      </div>
+      <div className="leaderboard-tabs" role="tablist" aria-label="Leaderboard period">
+        {(["daily", "weekly", "monthly"] as LeaderboardPeriod[]).map((item) => (
+          <button key={item} type="button" role="tab" aria-selected={period === item} className={period === item ? "active" : ""} onClick={() => setPeriod(item)}>
+            {item === "daily" ? "ዕለታዊ" : item === "weekly" ? "ሳምንታዊ" : "ወርሃዊ"}
+          </button>
+        ))}
+      </div>
+      {loading ? <p className="leaderboard-state">እየተጫነ ነው...</p> : error ? <p className="leaderboard-state error">{error}</p> : leaderboard?.entries.length ? (
+        <ol className="leaderboard-list">
+          {leaderboard.entries.map((entry, index) => (
+            <li key={entry.userId} className={index === 0 ? "leaderboard-first" : ""}>
+              <span className="leaderboard-rank">{index + 1}</span>
+              <span className="leaderboard-player"><strong>{entry.displayName}</strong><small>{entry.wins} {entry.wins === 1 ? "win" : "wins"}</small></span>
+              <Trophy aria-hidden="true" />
+            </li>
+          ))}
+        </ol>
+      ) : <p className="leaderboard-state">በዚህ ጊዜ የተመዘገበ አሸናፊ የለም።</p>}
+    </aside>
+  );
+}
+
 function AdminPasswordDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess: (token: string) => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -373,6 +437,7 @@ export default function Index() {
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [notice, setNotice] = useState("ካርዶች እየተጫኑ ነው...");
   const [panel, setPanel] = useState<"profile" | "wallet" | null>(null);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [wallet, setWallet] = useState<WalletResponse | null>(null);
   const [walletForm, setWalletForm] = useState({ amount: "", reference: "", account: "", owner: "" });
   const [walletBusy, setWalletBusy] = useState(false);
@@ -964,6 +1029,7 @@ export default function Index() {
           })}
         </div>
       </section>
+      {leaderboardOpen && <LeaderboardPanel apiBase={apiBase} onClose={() => setLeaderboardOpen(false)} />}
       {panel && (
         <WalletPanel
           panel={panel}
@@ -1024,6 +1090,10 @@ export default function Index() {
         <button onClick={() => setPanel("wallet")}>
           <Wallet />
           <span>Wallet</span>
+        </button>
+        <button className={leaderboardOpen ? "leaderboard-tab-active" : ""} onClick={() => { setLeaderboardOpen(true); setPanel(null); }} aria-label="Open leaderboard">
+          <Trophy />
+          <span>Leaderboard</span>
         </button>
       </nav>
     {adminUnlockOpen && <AdminPasswordDialog onClose={() => setAdminUnlockOpen(false)} onSuccess={completeAdminLogin} />}

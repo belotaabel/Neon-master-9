@@ -8,6 +8,7 @@ import { registerGameSockets } from "./socket";
 import { initializeSimulationDatabase, registerSimulationSockets, simulationEnabled } from "./simulation";
 import { registerGatewaySockets } from "./gateway-socket";
 import { initializeDatabase } from "./db";
+import { startLeaderboardReportScheduler } from "./leaderboard";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 
@@ -56,9 +57,13 @@ void configureSocketAdapter().catch((error) => {
 });
 
 httpServer.listen(port, () => {
-  void initializeDatabase().catch((error) => {
-    console.error("Neon database initialization failed", error instanceof Error ? { message: error.message, stack: error.stack, code: (error as { code?: string }).code } : error);
-  });
+  void initializeDatabase()
+    .catch((error) => {
+      console.error("Neon database initialization failed", error instanceof Error ? { message: error.message, stack: error.stack, code: (error as { code?: string }).code } : error);
+    })
+    .finally(() => {
+      if (serviceMode !== "gateway") startLeaderboardReportScheduler();
+    });
   void initializeSimulationDatabase().catch((error) => {
     console.error("Simulation database initialization failed", error instanceof Error ? { message: error.message, stack: error.stack, code: (error as { code?: string }).code } : error);
   });
