@@ -232,7 +232,10 @@ function WalletPanel({
       onNotice(successMessage);
       await loadWallet().catch(() => undefined);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Withdrawal failed";
+      const rawMessage = error instanceof Error ? error.message : "Withdrawal failed";
+      const errorMessage = rawMessage === "Withdrawal requires at least one approved deposit of 50 ETB or more"
+        ? "Withdraw ለማድረግ ቢያንስ 50 ብር የተፈቀደ deposit ቢያንስ አንድ ጊዜ ማድረግ ያስፈልጋል።"
+        : rawMessage;
       setRequestNotice({ type: "error", text: errorMessage });
       onNotice(errorMessage);
     } finally {

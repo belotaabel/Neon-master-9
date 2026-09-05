@@ -336,6 +336,11 @@ export async function createWithdrawalRequest(telegramId: number, amount: number
     await client.query("BEGIN");
     const user = await client.query("SELECT id FROM users WHERE telegram_id = $1 FOR UPDATE", [telegramId]);
     if (!user.rowCount) throw new Error("Telegram user is not registered");
+    const qualifyingDeposit = await client.query(
+      "SELECT 1 FROM transactions WHERE user_id = $1 AND type = 'deposit' AND status = 'approved' AND amount >= 50 LIMIT 1",
+      [user.rows[0].id],
+    );
+    if (!qualifyingDeposit.rowCount) throw new Error("Withdrawal requires at least one approved deposit of 50 ETB or more");
     const balance = await client.query("SELECT main_balance FROM balances WHERE user_id = $1 FOR UPDATE", [user.rows[0].id]);
     if (!balance.rowCount || Number(balance.rows[0].main_balance) < amount) throw new Error("Insufficient main balance");
     await client.query("UPDATE balances SET main_balance = main_balance - $1, updated_at = NOW() WHERE user_id = $2", [amount, user.rows[0].id]);
