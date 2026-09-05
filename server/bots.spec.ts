@@ -11,7 +11,7 @@ describe("production bot roster", () => {
 
   it("contains the supplied roster in order", () => {
     expect(BOT_ROSTER).toHaveLength(207);
-    expect(BOT_ROSTER.slice(0, 5)).toEqual(["Abel", "Nati_21", "Yoni", "Dagi_99", "Elias_7"]);
+    expect(BOT_ROSTER.slice(0, 5)).toEqual(["Abel", "Nati", "Yoni", "Dagi", "Elias"]);
     expect(BOT_ROSTER[BOT_ROSTER.length - 1]).toBe("Sintayehu");
     expect(new Set(BOT_ROSTER).size).toBeLessThan(BOT_ROSTER.length);
   });
