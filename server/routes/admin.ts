@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { RequestHandler } from "express";
-import { creditBotWallet, db, createAdminPromoCode, fundAllBotWallets, getAdminBots, getAdminOverview, getAdminPlayers, getAdminPromoCodes, getBotSettings, getDepositBonusSettings, updateBotSettings, updateDepositBonusSettings } from "../db";
+import { creditBotWallet, db, createAdminPromoCode, fundAllBotWallets, getAdminBots, getAdminOverview, getAdminPlayers, getAdminPromoCodes, getBotSettings, getDepositBonusSettings, getLeaderboardReportHour, updateBotSettings, updateDepositBonusSettings, updateLeaderboardReportHour } from "../db";
 import { getTelegramUser } from "./me";
 import { clearSimulationRun, defaultSimulationConfig, simulationEnabled, simulationRunStatus, startSimulationRun, stopSimulationRun } from "../simulation";
 
@@ -110,6 +110,31 @@ export const handleAdminBonusSettingsUpdate: RequestHandler = async (req, res) =
   } catch (error) {
     console.error("Admin bonus settings update failed", error);
     res.status(500).json({ error: "Bonus settings could not be saved" });
+  }
+};
+
+export const handleAdminLeaderboardSettings: RequestHandler = async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    res.json({ reportHour: await getLeaderboardReportHour() });
+  } catch (error) {
+    console.error("Admin leaderboard settings load failed", error);
+    res.status(500).json({ error: "Leaderboard settings unavailable" });
+  }
+};
+
+export const handleAdminLeaderboardSettingsUpdate: RequestHandler = async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const reportHour = Number(req.body?.reportHour);
+  if (!Number.isInteger(reportHour) || reportHour < 0 || reportHour > 23) {
+    res.status(400).json({ error: "Report hour must be a whole number from 0 to 23" });
+    return;
+  }
+  try {
+    res.json(await updateLeaderboardReportHour(reportHour));
+  } catch (error) {
+    console.error("Admin leaderboard settings update failed", error);
+    res.status(500).json({ error: "Leaderboard settings could not be saved" });
   }
 };
 

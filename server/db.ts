@@ -171,7 +171,8 @@ export async function initializeDatabase() {
       ('global_bot_count', 0),
       ('global_bot_purchase_interval_ms', 10),
       ('global_bot_batch_min_size', 1),
-      ('global_bot_batch_size', 1)
+      ('global_bot_batch_size', 1),
+      ('leaderboard_report_hour', 18)
     ON CONFLICT (key) DO NOTHING;
 
     CREATE INDEX IF NOT EXISTS game_cards_game_id_idx ON game_cards(game_id);
@@ -349,6 +350,33 @@ export async function createWithdrawalRequest(telegramId: number, amount: number
     return result.rows[0];
   } catch (error) { await client.query("ROLLBACK"); throw error; }
   finally { client.release(); }
+}
+
+export const DEFAULT_LEADERBOARD_REPORT_HOUR = 18;
+
+export function normalizeLeaderboardReportHour(value: number) {
+  return Number.isInteger(value) && value >= 0 && value <= 23
+    ? value
+    : DEFAULT_LEADERBOARD_REPORT_HOUR;
+}
+
+export async function getLeaderboardReportHour() {
+  if (!db) throw new Error("DATABASE_URL is not configured");
+  const result = await db.query<{ value: string | number }>(
+    "SELECT value FROM app_settings WHERE key = 'leaderboard_report_hour'",
+  );
+  return normalizeLeaderboardReportHour(Number(result.rows[0]?.value));
+}
+
+export async function updateLeaderboardReportHour(reportHour: number) {
+  if (!db) throw new Error("DATABASE_URL is not configured");
+  const normalized = normalizeLeaderboardReportHour(reportHour);
+  await db.query(
+    `INSERT INTO app_settings (key, value) VALUES ('leaderboard_report_hour', $1)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [normalized],
+  );
+  return { reportHour: normalized };
 }
 
 export async function getDepositBonusSettings() {
