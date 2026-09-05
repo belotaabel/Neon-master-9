@@ -43,7 +43,7 @@ type GameState = {
   gameId: string;
 };
 type WalletForm = { amount: string; reference: string; account: string; owner: string };
-type LeaderboardPeriod = "daily" | "weekly" | "monthly";
+type LeaderboardPeriod = "daily" | "weekly";
 type LeaderboardEntry = { userId: number; displayName: string; wins: number };
 type LeaderboardResponse = { period: LeaderboardPeriod; periodStart: string; periodEnd: string; entries: LeaderboardEntry[] };
 
@@ -325,9 +325,9 @@ function LeaderboardPanel({ apiBase, onClose }: { apiBase: string; onClose: () =
         <button className="icon-button" onClick={onClose} aria-label="Close leaderboard"><ArrowLeft /></button>
       </div>
       <div className="leaderboard-tabs" role="tablist" aria-label="Leaderboard period">
-        {(["daily", "weekly", "monthly"] as LeaderboardPeriod[]).map((item) => (
+        {(["daily", "weekly"] as LeaderboardPeriod[]).map((item) => (
           <button key={item} type="button" role="tab" aria-selected={period === item} className={period === item ? "active" : ""} onClick={() => setPeriod(item)}>
-            {item === "daily" ? "ዕለታዊ" : item === "weekly" ? "ሳምንታዊ" : "ወርሃዊ"}
+            {item === "daily" ? "ዕለታዊ" : "ሳምንታዊ"}
           </button>
         ))}
       </div>

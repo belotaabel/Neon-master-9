@@ -5,7 +5,7 @@ import { sendTelegramMessage } from "./routes/telegram";
 export const LEADERBOARD_TIME_ZONE = "Africa/Addis_Ababa";
 export const LEADERBOARD_REPORT_HOUR = 18;
 
-export type LeaderboardPeriod = "daily" | "weekly" | "monthly";
+export type LeaderboardPeriod = "daily" | "weekly";
 
 export interface LeaderboardEntry {
   userId: number;
@@ -39,7 +39,6 @@ interface PeriodBoundaries {
 const periodNames: Record<LeaderboardPeriod, string> = {
   daily: "Daily",
   weekly: "Weekly",
-  monthly: "Monthly",
 };
 
 function getLocalDateParts(date: Date): LocalDateParts {
@@ -101,44 +100,6 @@ function ethiopianDateKey(date: Date) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function getEthiopianDateAtLocalMidnight(parts: LocalCalendarDate) {
-  return new Intl.DateTimeFormat("en-US-u-ca-ethiopic", {
-    timeZone: LEADERBOARD_TIME_ZONE,
-    calendar: "ethiopic",
-    numberingSystem: "latn",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).formatToParts(localMidnightUtc(parts.year, parts.month, parts.day)).reduce<Record<string, string>>(
-    (values, part) => {
-      values[part.type] = part.value;
-      return values;
-    },
-    {},
-  );
-}
-
-function getEthiopianMonthStart(local: LocalDateParts) {
-  let candidate = { year: local.year, month: local.month, day: local.day };
-  for (let days = 0; days <= 32; days += 1) {
-    const ethiopian = getEthiopianDateAtLocalMidnight(candidate);
-    if (Number(ethiopian.day) === 1) return candidate;
-    candidate = addLocalDays(candidate, -1);
-  }
-  throw new Error("Unable to determine Ethiopian month start");
-}
-
-function getEthiopianMonthEnd(start: LocalCalendarDate) {
-  const first = getEthiopianDateAtLocalMidnight(start);
-  let candidate = addLocalDays(start, 1);
-  for (let days = 1; days <= 32; days += 1) {
-    const ethiopian = getEthiopianDateAtLocalMidnight(candidate);
-    if (Number(ethiopian.day) === 1 && ethiopian.month !== first.month) return candidate;
-    candidate = addLocalDays(candidate, 1);
-  }
-  throw new Error("Unable to determine Ethiopian month end");
-}
-
 function assertValidDate(date: Date) {
   if (Number.isNaN(date.getTime())) throw new Error("Invalid date");
 }
@@ -153,8 +114,6 @@ export function getPeriodBoundaries(
 
   if (period === "weekly") {
     startDate = addLocalDays(local, -((local.weekday + 6) % 7));
-  } else if (period === "monthly") {
-    startDate = getEthiopianMonthStart(local);
   }
 
   const start = localMidnightUtc(
@@ -162,12 +121,9 @@ export function getPeriodBoundaries(
     startDate.month,
     startDate.day,
   );
-  const endDate =
-    period === "monthly"
-      ? getEthiopianMonthEnd(startDate)
-      : period === "weekly"
-        ? addLocalDays(startDate, 7)
-        : addLocalDays(startDate, 1);
+  const endDate = period === "weekly"
+    ? addLocalDays(startDate, 7)
+    : addLocalDays(startDate, 1);
   const end = localMidnightUtc(endDate.year, endDate.month, endDate.day);
   return { start, end };
 }
@@ -177,8 +133,6 @@ export function getReportPeriods(now = new Date()): LeaderboardPeriod[] {
   const local = getLocalDateParts(now);
   const periods: LeaderboardPeriod[] = ["daily"];
   if (local.weekday === 1) periods.push("weekly");
-  const ethiopian = getEthiopianDateAtLocalMidnight(local);
-  if (Number(ethiopian.day) === 1) periods.push("monthly");
   return periods;
 }
 
@@ -277,7 +231,7 @@ export async function getLeaderboard(
 export const handleLeaderboard: RequestHandler = async (req, res) => {
   const period = String(req.query.period ?? "daily") as LeaderboardPeriod;
   if (!Object.prototype.hasOwnProperty.call(periodNames, period)) {
-    res.status(400).json({ error: "period must be daily, weekly, or monthly" });
+    res.status(400).json({ error: "period must be daily or weekly" });
     return;
   }
 
@@ -313,7 +267,7 @@ export async function executeLeaderboardReport(now = new Date()) {
   try {
     const reports = await Promise.all(
       getReportPeriods(now).map((period) => {
-        const referenceDate = period === "weekly" || period === "monthly"
+        const referenceDate = period === "weekly"
           ? new Date(now.getTime() - 24 * 60 * 60 * 1000)
           : now;
         return getLeaderboard(period, referenceDate);

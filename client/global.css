@@ -173,7 +173,7 @@ button:focus-visible, [role="button"]:focus-visible, input:focus-visible { outli
 .panel-kicker { margin: 0 0 7px; color: var(--gold); font-size: 10px; font-weight: 800; letter-spacing: .18em; }
 .leaderboard-heading h2 { margin: 0; color: var(--gold-bright); font-family: "Noto Sans Ethiopic", sans-serif; font-size: 26px; }
 .leaderboard-heading p:last-child { margin: 5px 0 0; color: var(--muted); font-family: "Noto Sans Ethiopic", sans-serif; font-size: 12px; }
-.leaderboard-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 25px; padding: 4px; border: 1px solid rgba(167, 74, 97, .32); border-radius: 12px; background: rgba(16, 41, 29, .55); }
+.leaderboard-tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 25px; padding: 4px; border: 1px solid rgba(167, 74, 97, .32); border-radius: 12px; background: rgba(16, 41, 29, .55); }
 .leaderboard-tabs button { padding: 10px 5px; border-radius: 8px; background: transparent; color: var(--muted); font-family: "Noto Sans Ethiopic", sans-serif; font-size: 12px; }
 .leaderboard-tabs button.active { background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep)); color: #39260c; font-weight: 800; }
 .leaderboard-list { display: grid; gap: 10px; margin: 22px 0 0; padding: 0; list-style: none; }

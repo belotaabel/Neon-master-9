@@ -29,26 +29,13 @@ describe("leaderboard period boundaries", () => {
     expect(boundaries.end.toISOString()).toBe("2024-01-21T21:00:00.000Z");
   });
 
-  it("uses the first day of the local month", () => {
-    const boundaries = getPeriodBoundaries(
-      "monthly",
-      new Date("2024-02-15T10:00:00.000Z"),
-    );
-
-    expect(boundaries.start.toISOString()).toBe("2024-02-08T21:00:00.000Z");
-    expect(boundaries.end.toISOString()).toBe("2024-03-09T21:00:00.000Z");
-  });
 });
 
 describe("leaderboard report scheduling and formatting", () => {
-  it("includes weekly and monthly reports only on their local schedule days", () => {
+  it("includes weekly reports only on local Mondays", () => {
     expect(getReportPeriods(new Date("2024-01-15T15:00:00.000Z"))).toEqual([
       "daily",
       "weekly",
-    ]);
-    expect(getReportPeriods(new Date("2023-09-12T15:00:00.000Z"))).toEqual([
-      "daily",
-      "monthly",
     ]);
     expect(getReportPeriods(new Date("2024-01-02T15:00:00.000Z"))).toEqual([
       "daily",
