@@ -530,7 +530,7 @@ export default function Index() {
           throw new Error(
             r.status === 401
               ? "Telegram authentication አልተረጋገጠም።"
-              : "Telegram authentication ላይ ስህተት ተፈጥሯል።",
+              : "Telegram authentication ���ይ ስህተት ተፈጥሯል።",
           );
         setUser(await r.json());
       })
