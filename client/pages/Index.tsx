@@ -6,12 +6,14 @@ import {
   Gamepad2,
   Home,
   MoreVertical,
+  RefreshCw,
   Star,
   Trophy,
   Users,
   Volume2,
   VolumeX,
   Wallet,
+  X,
 } from "lucide-react";
 import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
@@ -99,6 +101,9 @@ const isWinningCell = (lineId: number, rowIndex: number, columnIndex: number) =>
   return false;
 };
 
+const ballLetter = (value: number | null) =>
+  value === null ? "" : value <= 15 ? "B" : value <= 30 ? "I" : value <= 45 ? "N" : value <= 60 ? "G" : "O";
+
 declare global {
   interface Window {
     Telegram?: { WebApp?: { initData?: string; ready?: () => void } };
@@ -112,6 +117,7 @@ function CardView({
   onClick,
   winningLineIds,
   gameType = "75",
+  variant = "classic",
 }: {
   card: Card;
   selected: boolean;
@@ -119,7 +125,30 @@ function CardView({
   onClick: () => void;
   winningLineIds?: number[];
   gameType?: GameType;
+  variant?: "classic" | "board";
 }) {
+  if (variant === "board") {
+    return (
+      <div className="gb-card" role="group" aria-label={`Card ${card.card_number}`}>
+        <div className="gb-card-grid">
+          {card.rows.flatMap((row, rowIndex) =>
+            row.map((number, columnIndex) => {
+              const marked = number === 0 || (number !== null && called.has(number));
+              const winning = winningLineIds?.some((lineId) => isWinningCell(lineId, rowIndex, columnIndex));
+              return (
+                <span
+                  key={`${rowIndex}-${columnIndex}`}
+                  className={["gb-tile", marked ? "marked" : "", winning ? "winning" : ""].filter(Boolean).join(" ")}
+                >
+                  {number === 0 ? "*" : number}
+                </span>
+              );
+            }),
+          )}
+        </div>
+      </div>
+    );
+  }
   return (
     <article
       className={`ticket-card ${selected ? "selected" : ""}`}
@@ -441,6 +470,8 @@ export default function Index() {
   const [notice, setNotice] = useState("ካርዶች እየተጫኑ ነው...");
   const [panel, setPanel] = useState<"profile" | "wallet" | null>(null);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [hint, setHint] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(true);
   const [wallet, setWallet] = useState<WalletResponse | null>(null);
   const [walletForm, setWalletForm] = useState({ amount: "", reference: "", account: "", owner: "" });
   const [walletBusy, setWalletBusy] = useState(false);
@@ -499,7 +530,7 @@ export default function Index() {
           throw new Error(
             r.status === 401
               ? "Telegram authentication አልተረጋገጠም።"
-              : "Telegram authentication ላይ ስህተት ተፈጥሯል።",
+              : "Telegram authentication ���ይ ስህተት ተፈጥሯል።",
           );
         setUser(await r.json());
       })
@@ -834,88 +865,98 @@ export default function Index() {
     );
   if (playing)
     return (
-      <main className="app-shell playing-shell">
-        <header className="topbar">
-          <button
-            className="icon-button"
-            onClick={() => { setPlaying(false); setCountdown(50); }}
-            aria-label="Back"
-          >
-            <ArrowLeft />
+      <main className="app-shell game-board-shell">
+        <header className="gb-topbar">
+          <button className="gb-icon" onClick={() => { setPlaying(false); setCountdown(50); }} aria-label="Leave game">
+            <X />
           </button>
-          <h1 className="brand">
-            <span>NEON</span> <strong className="admin-unlock-target" onClick={handleAdminTap} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") handleAdminTap(); }} role="button" tabIndex={0}>{gameType}</strong> <em>BINGO</em>
+          <h1 className="gb-brand">
+            <span>NEON</span>
+            <strong className="admin-unlock-target" onClick={handleAdminTap} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") handleAdminTap(); }} role="button" tabIndex={0}>{gameType}</strong>
+            <em>BINGO</em>
           </h1>
-          <span className="game-id">Game ID: {game?.gameId ?? gameId ?? "—"}</span>
+          <button className="gb-icon" onClick={() => setPanel("profile")} aria-label="Menu"><MoreVertical /></button>
         </header>
-        <section className="stats-row">
-          <div className="stat purple">
-            <Users />
-            <span>
-              <small>የአሁኑ ጨዋታ ካርዶች</small>
-              <b>{game?.cardCount ?? 0}</b>
-            </span>
-          </div>
-          <div className="stat blue">
-            <Wallet />
-            <span>
-              <small>የሽልማት ፈንድ</small>
-              <b>{game?.prizeAmount ?? 0} ብር</b>
-            </span>
-          </div>
-          <div className="stat gold">
-            <Star />
-            <span>
-              <small>የተጠሩ</small>
-              <b>{called.size}/75</b>
-            </span>
-          </div>
+        <section className="gb-stats" aria-label="Game stats">
+          <div className="gb-pill"><small>Game</small><b>{String(game?.gameId ?? gameId ?? "—").slice(0, 6)}</b></div>
+          <div className="gb-pill"><small>Derash</small><b>{game?.prizeAmount ?? 0}</b></div>
+          <div className="gb-pill"><small>Bonus</small><b>0</b></div>
+          <div className="gb-pill"><small>Bet</small><b>{selected.length * 10}</b></div>
+          <div className="gb-pill"><small>Calls</small><b>{called.size}</b></div>
+          <button type="button" className={`gb-pill gb-hint ${hint ? "on" : ""}`} onClick={() => setHint((value) => !value)}>
+            <small>Hint</small><b>{hint ? "ON" : "OFF"}</b>
+          </button>
         </section>
-        <section className="draw">
-          <div className="draw-heading">
-            <p>የአሁኑ ቁጥር</p>
-            <button
-              type="button"
-              className="sound-toggle"
-              onClick={toggleSound}
-              aria-label={soundEnabled ? "Mute number sounds" : "Turn on number sounds"}
-              title={soundEnabled ? "Mute number sounds" : "Turn on number sounds"}
-            >
+        <section className="gb-draw">
+          <div className="gb-recent">
+            {(game?.calledNumbers ?? []).slice(-3, -1).map((number, index) => (
+              <span key={`${number}-${index}`} className="gb-recent-ball">{ballLetter(number)}{number}</span>
+            ))}
+            <div className="gb-current" aria-live="polite">{currentBall === null ? "—" : `${ballLetter(currentBall)}${currentBall}`}</div>
+          </div>
+          <div className="gb-auto">
+            <span className="gb-auto-label">Auto</span>
+            <button type="button" role="switch" aria-checked={autoPlay} className={`gb-switch ${autoPlay ? "on" : ""}`} onClick={() => setAutoPlay((value) => !value)} aria-label="Auto play">
+              <i />
+            </button>
+            <span className={`gb-auto-state ${autoPlay ? "on" : ""}`}>{autoPlay ? "ON" : "OFF"}</span>
+            <button type="button" className="gb-sound" onClick={toggleSound} aria-label={soundEnabled ? "Mute number sounds" : "Turn on number sounds"}>
               {soundEnabled ? <Volume2 /> : <VolumeX />}
             </button>
           </div>
-          <div className="current-ball-layout">
-            <strong className="ball-letter">{currentBall === null ? "—" : currentBall <= 15 ? "B" : currentBall <= 30 ? "I" : currentBall <= 45 ? "N" : currentBall <= 60 ? "G" : "O"}</strong>
-            <div className="orb">{currentBall ?? "—"}</div>
-            <span className="called-count">{called.size}/75</span>
-          </div>
         </section>
-        <section className="ball-history" aria-label="Called ball history">
-          <h2>የኳስ ማሽን</h2>
-          <div className="ball-history-list">
-            {(game?.calledNumbers ?? []).slice(-45).reverse().map((number, index) => (
-              <span key={`${number}-${index}`} className={`ball-cell ${number === currentBall ? "latest" : ""}`} style={{ animationDelay: `${index * 35}ms` }}>{number}</span>
-            ))}
-            {!game?.calledNumbers?.length && <small>እስካሁን ኳስ አልተጠራም</small>}
-          </div>
-        </section>
-        <section className="tickets">
-          {selected.map((id) => {
-            const card = cardForId(id);
-            return (
-              card && (
-                <CardView
-                  key={id}
-                  card={card}
-                  selected
-                  called={called}
-                  onClick={() => undefined}
-                  gameType={gameType}
-                />
-              )
-            );
-          })}
-        </section>
+        <div className="gb-main">
+          <section className="gb-board" aria-label="Called numbers board">
+            <div className="gb-head">
+              {(["B", "I", "N", "G", "O"] as const).map((letter) => (
+                <span key={letter} className={`gb-bubble gb-${letter.toLowerCase()}`}>{letter}</span>
+              ))}
+            </div>
+            <div className="gb-grid">
+              {(() => {
+                const hintNumbers = new Set<number>();
+                if (hint) selected.forEach((id) => cardForId(id)?.rows.forEach((row) => row.forEach((n) => { if (n && n > 0) hintNumbers.add(n); })));
+                return Array.from({ length: 15 }).flatMap((_, rowIndex) =>
+                  Array.from({ length: 5 }).map((__, colIndex) => {
+                    const value = colIndex * 15 + rowIndex + 1;
+                    const isCalled = called.has(value);
+                    const isLatest = value === currentBall;
+                    return (
+                      <span
+                        key={value}
+                        className={["gb-num", isCalled ? "called" : "", isLatest ? "latest" : "", hint && hintNumbers.has(value) && !isCalled ? "hinted" : ""].filter(Boolean).join(" ")}
+                      >
+                        {value}
+                      </span>
+                    );
+                  }),
+                );
+              })()}
+            </div>
+          </section>
+          <section className="gb-cards" aria-label="Your cards">
+            <div className="gb-head">
+              {(["B", "I", "N", "G", "O"] as const).map((letter) => (
+                <span key={letter} className={`gb-bubble gb-${letter.toLowerCase()}`}>{letter}</span>
+              ))}
+            </div>
+            {selected.map((id) => {
+              const card = cardForId(id);
+              return (
+                card && (
+                  <div className="gb-card-wrap" key={id}>
+                    <CardView card={card} selected called={called} onClick={() => undefined} gameType={gameType} variant="board" />
+                    <div className="gb-auto-tag">Automatic ({card.card_number})</div>
+                  </div>
+                )
+              );
+            })}
+          </section>
+        </div>
+        <div className="gb-actions">
+          <button type="button" className="gb-refresh" onClick={() => window.location.reload()}><RefreshCw /> Refresh</button>
+          <button type="button" className="gb-leave" onClick={() => { setPlaying(false); setCountdown(50); }}>Leave</button>
+        </div>
         {winnerAnnouncement && (
           <>
             <div className="winner-modal" role="status">
